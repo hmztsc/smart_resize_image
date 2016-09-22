@@ -1,35 +1,55 @@
 <?
-  function smart_resize_image($file,
+ function smart_resize_image($file,
                               $width              = 0, 
                               $height             = 0, 
-                              $proportional       = false, 
+                              $size       = "cover", 
                               $output             = 'file', 
                               $delete_original    = true, 
                               $use_linux_commands = false ) {
       
     if ( $height <= 0 && $width <= 0 ) return false;
-
     # Setting defaults and meta
     $info                         = getimagesize($file);
     $image                        = '';
     $final_width                  = 0;
     $final_height                 = 0;
     list($width_old, $height_old) = $info;
-
     # Calculating proportionality
-    if ($proportional) {
-      if      ($width  == 0)  $factor = $height/$height_old;
-      elseif  ($height == 0)  $factor = $width/$width_old;
-      else                    $factor = min( $width / $width_old, $height / $height_old );
+    if ($size=="contain") {
+        
+        $x_ratio = $width / $width_old;
+        $y_ratio = $height / $height_old;
 
-      $final_width  = round( $width_old * $factor );
-      $final_height = round( $height_old * $factor );
+        if (($width_old <= $width) && ($height_old <= $height)) {
+            $final_width = $width_old;
+            $final_height = $height_old;
+        } elseif (($x_ratio * $height_old) < $height) {
+            $final_height = ceil($x_ratio * $height_old);
+            $final_width = $width;
+        } else {
+            $final_width = ceil($y_ratio * $width_old);
+            $final_height = $height;
+        }
     }
-    else {
-      $final_width = ( $width <= 0 ) ? $width_old : $width;
-      $final_height = ( $height <= 0 ) ? $height_old : $height;
-    }
+    else if($size=="cover") {
+        
+        $original_aspect = $width_old / $height_old;
+        $thumb_aspect = $width / $height;
 
+        if ( $original_aspect >= $thumb_aspect )
+        {
+        // If image is wider than thumbnail (in aspect ratio sense)
+        $final_height = $height;
+        $final_width = $width_old / ($height_old / $height);
+        }
+        else
+        {
+        // If the thumbnail is wider than the image
+        $final_width = $width;
+        $final_height = $height_old / ($width_old / $width);
+        }
+      
+    }
     # Loading image to memory according to type
     switch ( $info[2] ) {
       case IMAGETYPE_GIF:   $image = imagecreatefromgif($file);   break;
@@ -40,10 +60,9 @@
     
     
     # This is the resizing/resampling/transparency-preserving magic
-    $image_resized = imagecreatetruecolor( $final_width, $final_height );
+    $image_resized = imagecreatetruecolor( $width, $height );
     if ( ($info[2] == IMAGETYPE_GIF) || ($info[2] == IMAGETYPE_PNG) ) {
       $transparency = imagecolortransparent($image);
-
       if ($transparency >= 0) {
         $transparent_color  = imagecolorsforindex($image, $trnprt_indx);
         $transparency       = imagecolorallocate($image_resized, $trnprt_color['red'], $trnprt_color['green'], $trnprt_color['blue']);
@@ -57,14 +76,13 @@
         imagesavealpha($image_resized, true);
       }
     }
-    imagecopyresampled($image_resized, $image, 0, 0, 0, 0, $final_width, $final_height, $width_old, $height_old);
+    imagecopyresampled($image_resized, $image, (($width - $final_width)/ 2), (($height - $final_height) / 2), 0, 0, $final_width, $final_height, $width_old, $height_old);
     
     # Taking care of original, if needed
     if ( $delete_original ) {
       if ( $use_linux_commands ) exec('rm '.$file);
       else @unlink($file);
     }
-
     # Preparing a method of providing result
     switch ( strtolower($output) ) {
       case 'browser':
@@ -89,7 +107,6 @@
       case IMAGETYPE_PNG:   imagepng($image_resized, $output);    break;
       default: return false;
     }
-
     return true;
   }
 ?>
